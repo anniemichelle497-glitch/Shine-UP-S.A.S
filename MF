@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHINE UP S.A.S.</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f3f8;color:#242238}
+header{background:#211b35;color:white;padding:22px 7%;font-size:23px;font-weight:bold}
+header small{display:block;font-size:11px;letter-spacing:2px;color:#c9c0e7;margin-top:5px}
+main{max-width:1000px;margin:35px auto;padding:0 18px}
+.card{background:white;padding:25px;border-radius:15px;margin-bottom:20px;box-shadow:0 4px 18px #0000000a}
+h2{margin-top:0}
+input,textarea{width:100%;padding:12px;margin:7px 0 15px;border:1px solid #ddd8e8;border-radius:8px;font-size:15px}
+button{padding:12px 17px;border:0;border-radius:8px;background:#7352d6;color:white;cursor:pointer;margin:5px 4px 5px 0}
+button.secondary{background:#eae6f5;color:#382b60}
+.project{padding:15px;border:1px solid #e8e4ef;border-radius:10px;margin:10px 0}
+.muted{color:#777}
+.hidden{display:none}
+#message{white-space:pre-wrap;margin-top:12px;color:#6146b8}
+</style>
+</head>
+<body>
+<header>SHINE UP S.A.S.<small>PLATAFORMA DE INGENIERÍA FINANCIERA</small></header>
+<main>
+<section id="auth" class="card">
+<h2>Bienvenido a SHINE UP</h2>
+<p class="muted">Inicia sesión o crea tu cuenta para ingresar.</p>
+<label>Correo electrónico</label>
+<input id="email" type="email" placeholder="correo@ejemplo.com">
+<label>Contraseña</label>
+<input id="password" type="password" placeholder="Mínimo 6 caracteres">
+<button onclick="register()">Crear cuenta</button>
+<button class="secondary" onclick="login()">Iniciar sesión</button>
+<p id="message"></p>
+</section>
+
+<section id="app" class="hidden">
+<div class="card">
+<h2>Panel principal</h2>
+<p>Bienvenido a tu espacio de trabajo financiero.</p>
+<button class="secondary" onclick="logout()">Cerrar sesión</button>
+</div>
+<div class="card">
+<h2>Crear proyecto financiero</h2>
+<label>Nombre del proyecto</label>
+<input id="projectName" placeholder="Ej. Evaluación de inversión">
+<label>Descripción</label>
+<textarea id="projectDescription" rows="3" placeholder="Descripción del proyecto"></textarea>
+<button onclick="createProject()">Guardar proyecto</button>
+<p id="projectMessage"></p>
+</div>
+<div class="card">
+<h2>Mis proyectos</h2>
+<div id="projects">Cargando proyectos...</div>
+</div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL = "https://imzxtydaqnxpbxmtnnxg.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable_8Q94WmwRB7dGM7I4IFKVZw_3Dacq-ym";
+
+const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const message = document.getElementById("message");
+
+async function register(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ const {error}=await db.auth.signUp({email,password});
+ message.textContent=error?error.message:"Cuenta creada. Revisa tu correo si se solicita confirmación.";
+}
+
+async function login(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ const {error}=await db.auth.signInWithPassword({email,password});
+ message.textContent=error?error.message:"";
+ if(!error) await checkSession();
+}
+
+async function logout(){
+ await db.auth.signOut();
+ await checkSession();
+}
+
+async function checkSession(){
+ const {data}=await db.auth.getSession();
+ const logged=!!data.session;
+ document.getElementById("auth").classList.toggle("hidden",logged);
+ document.getElementById("app").classList.toggle("hidden",!logged);
+ if(logged) await loadProjects();
+}
+
+async function createProject(){
+ const {data:{user}}=await db.auth.getUser();
+ const name=document.getElementById("projectName").value.trim();
+ const description=document.getElementById("projectDescription").value.trim();
+ const out=document.getElementById("projectMessage");
+ if(!name){out.textContent="Escribe el nombre del proyecto.";return}
+ const {error}=await db.from("projects").insert({
+   user_id:user.id,name,description
+ });
+ out.textContent=error?error.message:"Proyecto guardado correctamente.";
+ if(!error){
+  document.getElementById("projectName").value="";
+  document.getElementById("projectDescription").value="";
+  await loadProjects();
+ }
+}
+
+async function deleteProject(id){
+ if(!confirm("¿Eliminar este proyecto?"))return;
+ const {error}=await db.from("projects").delete().eq("id",id);
+ if(error) alert(error.message);
+ await loadProjects();
+}
+
+async function loadProjects(){
+ const list=document.getElementById("projects");
+ const {data,error}=await db.from("projects")
+   .select("id,name,description,created_at")
+   .order("created_at",{ascending:false});
+ if(error){list.textContent=error.message;return}
+ if(!data.length){list.textContent="Todavía no tienes proyectos guardados.";return}
+ list.innerHTML="";
+ data.forEach(p=>{
+  const item=document.createElement("div");
+  item.className="project";
+  const title=document.createElement("strong");
+  title.textContent=p.name;
+  const desc=document.createElement("p");
+  desc.className="muted";
+  desc.textContent=p.description||"Sin descripción";
+  const del=document.createElement("button");
+  del.className="secondary";
+  del.textContent="Eliminar";
+  del.onclick=()=>deleteProject(p.id);
+  item.append(title,desc,del);
+  list.appendChild(item);
+ });
+}
+
+db.auth.onAuthStateChange(()=>{checkSession()});
+checkSession();
+</script>
+</body>
+</html>
